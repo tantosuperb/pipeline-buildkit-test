@@ -37,7 +37,7 @@
 | `RUN --security=insecure` | buildkitd 엔타이틀먼트 필요(기본 환경 미허용) | 엔타이틀먼트 부여된 환경에서만 |
 | 레지스트리 캐시 export/import | 빌드 호출 옵션(`--cache-to/--cache-from`) | 아래 BuildKit 파라미터 표 참고 |
 
-## BuildKit 빌드 파라미터 (개발팀 요청 — Task 파라미터로 테스트)
+## BuildKit 빌드 파라미터 (Task 파라미터로 테스트)
 
 > 실제 노출되는 파라미터명은 `buildkit-daemonless.yaml` 의 Task `params` / `buildctl` 인자와 대조 필요.
 
