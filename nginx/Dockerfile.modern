@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.7
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# COPY --link + RUN --mount=type=cache (npm 캐시) - BuildKit 신문법
+COPY --link package.json ./
+RUN --mount=type=cache,target=/root/.npm npm install
+COPY --link . .
+RUN npm run build
+
+FROM nginx:1.25-alpine
+# COPY --link --chown 조합
+COPY --link --chown=101:101 --from=builder /app/build /usr/share/nginx/html
+
+# Heredoc 멀티라인 RUN
+RUN <<EOF
+echo "==> nginx assets:"
+ls -la /usr/share/nginx/html
+EOF
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

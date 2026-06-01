@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1.7
+
+# FROM 이전에 선언된 글로벌 ARG (모든 stage에서 참조 가능 - BuildKit 신문법)
+ARG APP_HOME=/home/usr/app
+ARG SERVICE_NAME=app
+
+# ===== Stage 1: builder =====
+FROM maven:3-eclipse-temurin-17 AS builder
+ARG APP_HOME
+
+# COPY --link: 더 효율적인 레이어 생성 (BuildKit 신문법)
+COPY --link . $APP_HOME/
+WORKDIR $APP_HOME
+
+# RUN --mount=type=cache: Maven 로컬 저장소를 빌드 간 캐시로 마운트
+RUN --mount=type=cache,id=mvn-repo,target=/root/.m2 \
+    mvn clean package -DskipTests -B
+
+# ===== Stage 2: runtime =====
+FROM eclipse-temurin:17-jre-alpine
+ARG APP_HOME
+ARG SERVICE_NAME
+
+# COPY 신옵션 조합: --link, --chown, --chmod
+COPY --link --chown=1000:1000 --chmod=755 \
+     --from=builder $APP_HOME/target/*.jar \
+     $APP_HOME/$SERVICE_NAME.jar
+
+# Heredoc 문법으로 멀티라인 RUN
+RUN <<EOF
+echo "==> Build finished for ${SERVICE_NAME}"
+ls -la ${APP_HOME}/
+echo "==> JAR size:"
+du -h ${APP_HOME}/${SERVICE_NAME}.jar
+EOF
+
+# --network=none: 네트워크 없이 RUN (외부 통신 차단 검증)
+RUN --network=none echo "Network isolation verified"
+
+USER 1000
+WORKDIR $APP_HOME
+CMD ["sh", "-c", "java -jar ${APP_HOME}/${SERVICE_NAME}.jar"]

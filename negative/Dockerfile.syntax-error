@@ -1,0 +1,4 @@
+# 의도적으로 실패하는 Dockerfile - 빌드 실패가 PipelineRun Failed로 전파되는지 검증
+FROM eclipse-temurin:17-jre-alpine
+COPYY . /app
+RUN this-command-does-not-exist
