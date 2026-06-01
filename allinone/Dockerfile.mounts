@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1-labs
+# =====================================================================
+# RUN --mount 계열 + network 격리 검증
+#   cache / secret / ssh / tmpfs / bind / --network=none
+#   secret·ssh 는 입력이 없어도 빌드가 깨지지 않도록 required=false + 가드
+#   Kaniko 에서는 전부 미지원 → BuildKit 에서만 성공
+# =====================================================================
+ARG BASE=alpine:3
+
+FROM ${BASE} AS builder
+WORKDIR /work
+
+# (1) cache mount : apk 캐시를 빌드 간 캐시로 마운트
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    apk add --no-cache curl
+
+# (2) secret mount : 빌드 시 비밀값 주입 (이미지에 남지 않음)
+RUN --mount=type=secret,id=mysecret,required=false \
+    sh -c 'if [ -f /run/secrets/mysecret ]; then echo "secret bytes: $(wc -c </run/secrets/mysecret)"; else echo "no secret provided (ok)"; fi'
+
+# (3) ssh mount : SSH agent 포워딩 (private git clone 등)
+RUN --mount=type=ssh,required=false \
+    echo "SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-none}"
+
+# (4) tmpfs mount : 임시 메모리 파일시스템
+RUN --mount=type=tmpfs,target=/tmpwork \
+    sh -c 'echo hi >/tmpwork/x && cat /tmpwork/x'
+
+# bind mount 소스로 쓸 별도 스테이지
+FROM ${BASE} AS data
+RUN mkdir -p /d && echo "from-data-stage" >/d/data.txt
+
+# builder 를 상속 → builder 가 빌드 그래프에 포함됨
+FROM builder AS final
+WORKDIR /work
+
+# (5) bind mount : 다른 스테이지를 빌드 중 읽기전용 마운트
+RUN --mount=type=bind,from=data,source=/d,target=/mnt/d \
+    cat /mnt/d/data.txt
+
+# (6) --network=none : 네트워크 없이 RUN (외부 통신 차단 검증)
+RUN --network=none echo "network isolation OK"
+
+CMD ["echo", "mounts ok"]

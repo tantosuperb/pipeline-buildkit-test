@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1-labs
+# =====================================================================
+# 문법 / Heredoc / 멀티스테이지 / 클래식 명령어 검증
+#   syntax directive, FROM 이전 글로벌 ARG, 자동 플랫폼 ARG
+#   RUN heredoc(sh) + 커스텀 인터프리터 heredoc(python)
+#   SHELL/ENV/LABEL/EXPOSE/VOLUME/STOPSIGNAL/HEALTHCHECK/USER/ONBUILD/ENTRYPOINT/CMD
+# =====================================================================
+
+# FROM 이전 글로벌 ARG (모든 stage 에서 참조 가능)
+ARG APP_HOME=/app
+ARG BASE=alpine:3
+
+# 자동 플랫폼 ARG (값은 BuildKit 이 자동 주입)
+FROM --platform=$BUILDPLATFORM python:3-alpine AS py
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
+RUN <<EOF
+echo "BUILDPLATFORM=${BUILDPLATFORM} TARGETPLATFORM=${TARGETPLATFORM} (${TARGETOS}/${TARGETARCH})"
+EOF
+
+# 커스텀 인터프리터 heredoc (python 으로 실행)
+RUN <<EOT python3
+with open("/pyout.txt", "w") as f:
+    f.write("python heredoc OK\n")
+print("python heredoc OK")
+EOT
+
+# ===== 최종 런타임 스테이지 =====
+FROM ${BASE} AS runtime
+ARG APP_HOME
+SHELL ["/bin/sh", "-c"]
+ENV APP_HOME=${APP_HOME} \
+    GREETING="hello-buildkit"
+LABEL org.opencontainers.image.title="buildkit-allinone-misc" \
+      org.opencontainers.image.description="BuildKit syntax/instruction coverage"
+WORKDIR ${APP_HOME}
+
+# 커스텀 인터프리터 스테이지 산출물을 가져옴 (py 스테이지를 그래프에 포함)
+COPY --from=py /pyout.txt ./pyout.txt
+
+# sh heredoc (멀티라인 RUN)
+RUN <<EOF
+echo "==> assembled at ${APP_HOME}"
+cat ./pyout.txt
+EOF
+
+EXPOSE 8080
+VOLUME ["/data"]
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=3s CMD test -d "$APP_HOME" || exit 1
+USER 1000
+ONBUILD RUN echo "onbuild triggered in child build"
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["echo ${GREETING}"]

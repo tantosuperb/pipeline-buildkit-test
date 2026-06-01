@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1-labs
+# =====================================================================
+# COPY / ADD 신옵션 검증
+#   COPY --link / --chown / --chmod / --parents / --exclude / heredoc
+#   ADD --chmod / ADD <git-ref>
+#   --parents, --exclude 는 labs 채널 기능이라 syntax=...:1-labs 필요
+#   Kaniko 에서는 대부분 미지원 → BuildKit 에서만 성공
+# =====================================================================
+ARG BASE=alpine:3
+
+FROM ${BASE} AS builder
+WORKDIR /work
+
+# (1) COPY heredoc : 파일을 인라인으로 생성
+COPY <<EOF /work/generated.txt
+generated via COPY heredoc
+EOF
+
+# (2) COPY --link : 더 효율적인 레이어 생성
+COPY --link src ./src
+
+# (3) COPY --parents : 부모 디렉터리 구조 보존 (labs)
+#     src/./a/*.txt  →  /./ 가 보존 시작 지점 → ./preserved/a/hello.txt
+COPY --parents src/./a/*.txt ./preserved/
+
+# (4) COPY --exclude : 특정 패턴 제외 (labs). *.md 제외하고 컨텍스트 복사
+COPY --exclude=*.md . ./ctxcopy/
+
+# (5) ADD --chmod : 로컬 파일을 권한 지정하여 복사
+ADD --chmod=640 keep.txt ./keep-640.txt
+
+# (6) ADD <git-ref> : git 저장소를 직접 ADD (public repo, BuildKit 전용)
+ADD https://github.com/tantosuperb/pipeline-buildkit-test.git#main /repo
+
+# (7) ADD --checksum : 원격 URL 다운로드 + 체크섬 검증 (옵션)
+#     아래 한 줄의 주석을 풀고 체크섬을 채워 사용:
+#       체크섬 계산:  curl -fsSL <URL> | sha256sum
+# ADD --checksum=sha256:<여기에_채우기> https://example.com/file.txt ./remote.txt
+
+FROM ${BASE} AS final
+WORKDIR /work
+
+# (8) COPY --from + --chown + --chmod 조합
+COPY --link --chown=1000:1000 --chmod=755 --from=builder /work/generated.txt ./generated.txt
+COPY --from=builder /work/preserved ./preserved
+COPY --from=builder /repo/README.md ./repo-readme.md
+
+RUN ls -alR /work
+CMD ["echo", "copy-add ok"]
