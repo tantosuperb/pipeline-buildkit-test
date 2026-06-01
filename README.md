@@ -1,6 +1,6 @@
 # pipeline-buildkit-test
 
-Pipeline 이미지 빌드 Task **Kaniko → BuildKit 전환(Pipeline/1029)** 검증용 테스트 저장소.
+Pipeline 이미지 빌드 Task **Kaniko → BuildKit 전환** 검증용 테스트 저장소.
 
 Maven / nginx 두 스택에 대해 **구문법(legacy)** 과 **신문법(modern)** Dockerfile 페어를 제공한다.
 - `legacy` : Docker 17~18 수준 문법 → Kaniko·BuildKit 모두 성공해야 함 (회귀)
